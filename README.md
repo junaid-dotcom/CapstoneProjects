@@ -29,7 +29,13 @@ The public proxy key in `src/services/restaurantService.js` is supplied by the p
 - `k8s/hpa.yaml` scales between 2 and 8 replicas at 65% average CPU utilization.
 - `.github/workflows/build-and-push.yml` builds and pushes `latest` and commit-tagged Docker Hub images on pushes to `main`, then can notify Slack.
 
-Set GitHub Actions secrets `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN`, and optionally `SLACK_WEBHOOK_URL`. Replace `DOCKERHUB_USERNAME` in the deployment manifest with the real image namespace. Apply Kubernetes manifests only after the image is published and a cluster with Metrics Server is configured. The capstone brief separately requires a configured Prometheus/Grafana deployment and a live load test; those environment-specific pieces need cluster credentials and a monitoring stack, so they are not included as turnkey resources here.
+Before the first workflow run, open your GitHub repository's **Settings → Secrets and variables → Actions → New repository secret** and add:
+
+- `DOCKERHUB_USERNAME`: your Docker Hub username (not your email address).
+- `DOCKERHUB_TOKEN`: a Docker Hub access token with permission to push images. Create one in Docker Hub under **Account Settings → Personal access tokens**; do not use or commit your account password.
+- `SLACK_WEBHOOK_URL` (optional): an incoming webhook URL if you want success notifications.
+
+The workflow checks for the two Docker Hub secrets before attempting login. Replace `DOCKERHUB_USERNAME` in the deployment manifest with the real image namespace. Apply Kubernetes manifests only after the image is published and a cluster with Metrics Server is configured. The capstone brief separately requires a configured Prometheus/Grafana deployment and a live load test; those environment-specific pieces need cluster credentials and a monitoring stack, so they are not included as turnkey resources here.
 
 ### Deploy with Docker
 
