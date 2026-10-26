@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
         - name: web
-          image: DOCKERHUB_USERNAME/quickbite-web:latest
+          image: abduljunaid/quickbite-web:latest
           ports:
             - name: http
               containerPort: 80

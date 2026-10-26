@@ -27,7 +27,7 @@ The public proxy key in `src/services/restaurantService.js` is supplied by the p
 - `Dockerfile` builds the static app and serves it with Nginx; `/health` supports container probes.
 - `k8s/deployment.yaml` defines a two-replica deployment, resource requests/limits, probes, and internal service.
 - `k8s/hpa.yaml` scales between 2 and 8 replicas at 65% average CPU utilization.
-- `.github/workflows/build-and-push.yml` builds and pushes `latest` and commit-tagged Docker Hub images on pushes to `main`, then can notify Slack.
+- `.github/workflows/build-and-push.yml` builds and pushes `latest` and commit-tagged Docker Hub images on pushes to `main`. A manual run can also deploy that commit to the local Kubernetes cluster through a self-hosted runner, and Slack receives the build/deploy result.
 
 Before the first workflow run, open your GitHub repository's **Settings → Secrets and variables → Actions → New repository secret** and add:
 
@@ -35,7 +35,11 @@ Before the first workflow run, open your GitHub repository's **Settings → Secr
 - `DOCKERHUB_TOKEN`: a Docker Hub access token with permission to push images. Create one in Docker Hub under **Account Settings → Personal access tokens**; do not use or commit your account password.
 - `SLACK_WEBHOOK_URL` (optional): an incoming webhook URL if you want success notifications.
 
-The workflow checks for the two Docker Hub secrets before attempting login. Replace `DOCKERHUB_USERNAME` in the deployment manifest with the real image namespace. Apply Kubernetes manifests only after the image is published and a cluster with Metrics Server is configured. The capstone brief separately requires a configured Prometheus/Grafana deployment and a live load test; those environment-specific pieces need cluster credentials and a monitoring stack, so they are not included as turnkey resources here.
+The workflow checks for the two Docker Hub secrets before attempting login. The local Kubernetes deployment option requires a GitHub **self-hosted Linux runner** on the laptop/WSL, labeled `quickbite-k8s`, with `kubectl` configured to use the local cluster. GitHub-hosted runners cannot directly reach a cluster running only on your laptop. Keep the self-hosted runner offline except when you intend to run this workflow, and do not run untrusted pull-request code on it.
+
+On pushes to `main`, GitHub builds and publishes the image and reports that result. To also deploy locally, go to **Actions → Build and publish QuickBite → Run workflow**, enable **Deploy the built image to the local Kubernetes cluster**, and start the run. The deploy job applies `k8s/deployment.yaml` and `k8s/hpa.yaml`, selects the commit-specific image, and waits for rollout completion. If the option is not enabled, deployment is shown as not requested. Slack reports both job results when `SLACK_WEBHOOK_URL` is configured.
+
+Apply Kubernetes manifests only after the image is published and a cluster with Metrics Server is configured. The capstone brief separately requires a configured Prometheus/Grafana deployment and a live load test; these remain cluster setup and demonstration steps.
 
 ### Deploy with Docker
 

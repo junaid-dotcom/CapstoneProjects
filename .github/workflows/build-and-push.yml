@@ -3,6 +3,12 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      deploy_to_local_k8s:
+        description: Deploy the built image to the local Kubernetes cluster
+        type: boolean
+        required: true
+        default: false
 permissions:
   contents: read
 jobs:
@@ -29,13 +35,43 @@ jobs:
           context: .
           push: true
           tags: ${{ secrets.DOCKERHUB_USERNAME }}/quickbite-web:latest,${{ secrets.DOCKERHUB_USERNAME }}/quickbite-web:${{ github.sha }}
-      - name: Notify Slack
-        if: success()
+
+  deploy-local-k8s:
+    name: Deploy to local Kubernetes
+    if: github.event_name == 'workflow_dispatch' && inputs.deploy_to_local_k8s
+    needs: image
+    # Register a GitHub self-hosted runner on the laptop/WSL that can access the cluster.
+    runs-on: [self-hosted, linux, quickbite-k8s]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply Kubernetes resources and deploy this commit
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          kubectl apply -f k8s/deployment.yaml
+          kubectl apply -f k8s/hpa.yaml
+          kubectl set image deployment/quickbite-web web="$DOCKERHUB_USERNAME/quickbite-web:$IMAGE_TAG"
+          kubectl rollout status deployment/quickbite-web --timeout=180s
+          kubectl get deployments,pods,services,hpa
+
+  notify-slack:
+    name: Report build and deployment status to Slack
+    if: always()
+    needs: [image, deploy-local-k8s]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send workflow status
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          BUILD_RESULT: ${{ needs.image.result }}
+          DEPLOY_RESULT: ${{ needs.deploy-local-k8s.result }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           if [ -n "$SLACK_WEBHOOK_URL" ]; then
-            curl --fail --silent --show-error -X POST -H 'Content-type: application/json' --data '{"text":"QuickBite image published successfully from GitHub Actions."}' "$SLACK_WEBHOOK_URL"
+            if [ "$DEPLOY_RESULT" = "skipped" ]; then DEPLOY_RESULT="not requested"; fi
+            MESSAGE="QuickBite workflow: image build/publish=$BUILD_RESULT; local Kubernetes deploy=$DEPLOY_RESULT. Details: $RUN_URL"
+            curl --fail --silent --show-error -X POST -H 'Content-type: application/json' --data "$(jq -n --arg text "$MESSAGE" '{text:$text}')" "$SLACK_WEBHOOK_URL"
           else
             echo "SLACK_WEBHOOK_URL is not configured; skipping notification."
           fi
